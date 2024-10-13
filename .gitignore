@@ -17,6 +17,10 @@ eggs/
 lib/
 lib64/
 parts/
+blogicum/static/
+blogicum/core/admin.py
+blogicum/core/tests.py
+blogicum/core/views.py
 sdist/
 var/
 wheels/

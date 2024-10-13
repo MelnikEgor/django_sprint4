@@ -68,27 +68,6 @@ def add_comment(request, post_id):
     return redirect('blog:post_detail', post_id=post_id)
 
 
-# class CommentCreateView(LoginRequiredMixin, CreateView):
-#     post = None
-#     model = Comments
-#     form_class = CommentsForm
-
-#     # Переопределяем dispatch()
-#     def dispatch(self, request, *args, **kwargs):
-#         self.post = get_object_or_404(Post, pk=kwargs['post_id'])
-#         return super().dispatch(request, *args, **kwargs)
-
-#     # Переопределяем form_valid()
-#     def form_valid(self, form):
-#         form.instance.author = self.request.user
-#         form.instance.post = self.post
-#         return super().form_valid(form)
-
-#     # Переопределяем get_success_url()
-#     def get_success_url(self):
-#         return reverse('blog:post_detail', kwargs={'post_id': self.post})
-
-
 class CommentUpdateView(OnlyAuthorMixin, CommetMixin, UpdateView):
     form_class = CommentsForm
 

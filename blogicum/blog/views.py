@@ -1,52 +1,17 @@
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
+from django.db.models import Count
+from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect
 from django.views.generic import (
     CreateView, DeleteView, DetailView, ListView, UpdateView
 )
-from django.urls import reverse
 
-from .forms import CommentsForm, PostForm, UserForm
-from .models import Category, Comments, Post, User
-from blogicum.constants import COUNT_POSTS_PAGINATE
-
-
-class CommetMixin:
-    model = Comments
-    template_name = 'blog/comment.html'
-    pk_url_kwarg = 'comment_id'
-
-    def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
-        context['comment'] = (self.object)
-        return context
-
-    def get_success_url(self):
-        return reverse(
-            'blog:post_detail',
-            kwargs={'post_id': self.object.post.id}
-        )
-
-
-class PaginateMixin:
-    paginate_by = COUNT_POSTS_PAGINATE
-
-
-class PostMixin:
-    model = Post
-    pk_url_kwarg = 'post_id'
-
-
-class ReverseMixin:
-    def get_success_url(self):
-        return reverse(
-            'blog:profile',
-            kwargs={'username': self.request.user.username}
-        )
-
-
-class TemplateMixin:
-    template_name = 'blog/create.html'
+from .forms import CommentForm, PostForm, UserForm
+from .mixins import (
+    CommetMixin, PaginateMixin, PostMixin, ReverseMixin, TemplateMixin
+)
+from .models import Category, Post, User
 
 
 class OnlyAuthorMixin(UserPassesTestMixin):
@@ -59,7 +24,7 @@ class OnlyAuthorMixin(UserPassesTestMixin):
 @login_required
 def add_comment(request, post_id):
     post = get_object_or_404(Post, pk=post_id)
-    form = CommentsForm(request.POST)
+    form = CommentForm(request.POST)
     if form.is_valid():
         comments = form.save(commit=False)
         comments.author = request.user
@@ -68,11 +33,21 @@ def add_comment(request, post_id):
     return redirect('blog:post_detail', post_id=post_id)
 
 
-class CommentUpdateView(OnlyAuthorMixin, CommetMixin, UpdateView):
-    form_class = CommentsForm
+class CommentUpdateView(
+    LoginRequiredMixin,
+    OnlyAuthorMixin,
+    CommetMixin,
+    UpdateView
+):
+    form_class = CommentForm
 
 
-class CommentDeleteView(OnlyAuthorMixin, CommetMixin, DeleteView):
+class CommentDeleteView(
+    LoginRequiredMixin,
+    OnlyAuthorMixin,
+    CommetMixin,
+    DeleteView
+):
     pass
 
 
@@ -86,19 +61,14 @@ class ProfileView(PaginateMixin, PostMixin, ListView):
     def get_queryset(self):
         user = self.get_user()
         if self.request.user == user:
-            return user.posts.select_related(
-                'author',
+            return user.posts(manager='count_comments').select_related(
                 'category',
                 'location'
-            ).prefetch_related(
-                'comments'
             )
         else:
             return user.posts(
-                manager='published_post'
-            ).prefetch_related(
-                'comments'
-            )
+                manager=('published_post')
+            ).annotate(comment_count=Count('comments')).order_by('-pub_date')
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -119,9 +89,8 @@ class UserUpdateView(LoginRequiredMixin, ReverseMixin, UpdateView):
 class PostListView(PaginateMixin, ListView):
     model = Post
     template_name = 'blog/index.html'
-    queryset = Post.published_post.all().prefetch_related(
-        'comments'
-    )
+    queryset = Post.published_post.all(
+    ).annotate(comment_count=Count('comments')).order_by('-pub_date')
 
 
 class PostCreateView(
@@ -136,7 +105,7 @@ class PostCreateView(
 
 
 class PostUpdateView(
-    OnlyAuthorMixin, PostMixin, TemplateMixin, UpdateView
+    LoginRequiredMixin, OnlyAuthorMixin, PostMixin, TemplateMixin, UpdateView
 ):
     form_class = PostForm
 
@@ -145,7 +114,12 @@ class PostUpdateView(
 
 
 class PostDeleteView(
-    OnlyAuthorMixin, PostMixin, ReverseMixin, TemplateMixin, DeleteView
+    LoginRequiredMixin,
+    OnlyAuthorMixin,
+    PostMixin,
+    ReverseMixin,
+    TemplateMixin,
+    DeleteView
 ):
 
     def get_context_data(self, **kwargs):
@@ -157,27 +131,25 @@ class PostDeleteView(
 class PostDetailView(PostMixin, DetailView):
     template_name = 'blog/detail.html'
 
-    def get_queryset(self):
-        post = get_object_or_404(
-            Post,
-            pk=self.kwargs['post_id']
-        )
-        if self.request.user == post.author:
-            return Post.objects.select_related(
+    def get_object(self, queryset=None):
+        if queryset is None:
+            queryset = self.get_queryset()
+        try:
+            post = queryset.select_related(
                 'author',
                 'category',
-                'location'
-            ).filter(
-                author=post.author
-            ).prefetch_related(
-                'comments'
-            )
-        else:
-            return Post.published_post.all()
+                'location',
+            ).filter(pk=self.kwargs['post_id']).get()
+            if not post.is_published:
+                if self.request.user != post.author:
+                    raise Http404
+        except queryset.model.DoesNotExist:
+            raise Http404
+        return post
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context['form'] = CommentsForm()
+        context['form'] = CommentForm()
         context['comments'] = (
             self.object.comments.select_related('author')
         )
@@ -201,10 +173,7 @@ class CatgoryView(PaginateMixin, ListView):
         category = self.get_category()
         return category.posts(
             manager='published_post'
-        ).all(
-        ).prefetch_related(
-            'comments'
-        )
+        ).annotate(comment_count=Count('comments')).order_by('-pub_date')
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)

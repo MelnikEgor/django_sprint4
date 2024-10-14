@@ -2,7 +2,7 @@ from django.contrib.auth import get_user_model
 from django.db import models
 from django.urls import reverse
 
-from .manager import PublishedPostManager
+from .manager import PublishedPostManager, CountCommentsUnderPostManager
 from blogicum.constants import LENGHT_STRING, MAX_QUANTITY_SYMBOLS
 from core.models import DateTimeModel, PublishedModel
 
@@ -67,13 +67,11 @@ class Post(DateTimeModel, PublishedModel):
     author = models.ForeignKey(
         User,
         on_delete=models.CASCADE,
-        related_name='posts',
         verbose_name='Автор публикации'
     )
     location = models.ForeignKey(
         Location,
         on_delete=models.SET_NULL,
-        related_name='posts',
         null=True,
         blank=True,
         verbose_name='Местоположение'
@@ -82,11 +80,11 @@ class Post(DateTimeModel, PublishedModel):
         Category,
         on_delete=models.SET_NULL,
         null=True,
-        related_name='posts',
         verbose_name='Категория'
     )
     objects = models.Manager()
     published_post = PublishedPostManager()
+    count_comments = CountCommentsUnderPostManager()
     image = models.ImageField(
         verbose_name='Изображение',
         upload_to='posts_images',
@@ -96,6 +94,7 @@ class Post(DateTimeModel, PublishedModel):
     class Meta(DateTimeModel.Meta):
         verbose_name = 'публикация'
         verbose_name_plural = 'Публикации'
+        default_related_name = 'posts'
         ordering = (
             '-pub_date',
             'title',
@@ -107,23 +106,15 @@ class Post(DateTimeModel, PublishedModel):
     def get_absolute_url(self):
         return reverse('blog:post_detail', kwargs={'post_id': self.pk})
 
-    @property
-    def comment_count(self):
-        return self.comments.count()
 
-
-class Comments(models.Model):
+class Comment(DateTimeModel):
     text = models.TextField(
         verbose_name='Комментарий'
     )
     post = models.ForeignKey(
         Post,
         on_delete=models.CASCADE,
-        related_name='comments',
         verbose_name='Пост'
-    )
-    created_at = models.DateTimeField(
-        auto_now_add=True
     )
     author = models.ForeignKey(
         User,
@@ -131,7 +122,14 @@ class Comments(models.Model):
         verbose_name='Автор комментария'
     )
 
-    class Meta:
+    class Meta(DateTimeModel.Meta):
         ordering = ('created_at',)
         verbose_name = 'комментарий'
         verbose_name_plural = 'Комментарии'
+        default_related_name = 'comments'
+
+    def __str__(self):
+        return (
+            f'{self.post.title} | {self.author} |'
+            f' {self.text}'[:MAX_QUANTITY_SYMBOLS]
+        )

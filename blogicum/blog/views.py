@@ -1,7 +1,5 @@
 from django.contrib.auth.decorators import login_required
-from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
-from django.db.models import Count
-from django.http import Http404
+from django.contrib.auth.mixins import LoginRequiredMixin
 from django.shortcuts import get_object_or_404, redirect
 from django.views.generic import (
     CreateView, DeleteView, DetailView, ListView, UpdateView
@@ -9,16 +7,14 @@ from django.views.generic import (
 
 from .forms import CommentForm, PostForm, UserForm
 from .mixins import (
-    CommetMixin, PaginateMixin, PostMixin, ReverseMixin, TemplateMixin
+    CommetMixin,
+    OnlyAuthorMixin,
+    PaginateMixin,
+    PostMixin,
+    ReverseMixin,
+    TemplateMixin
 )
 from .models import Category, Post, User
-
-
-class OnlyAuthorMixin(UserPassesTestMixin):
-
-    def test_func(self):
-        object = self.get_object()
-        return object.author == self.request.user
 
 
 @login_required
@@ -61,14 +57,16 @@ class ProfileView(PaginateMixin, PostMixin, ListView):
     def get_queryset(self):
         user = self.get_user()
         if self.request.user == user:
-            return user.posts(manager='count_comments').select_related(
+            return user.posts(manager='custom_objects').comment_count(
+            ).select_related(
                 'category',
-                'location'
+                'location',
+                'author'
             )
         else:
             return user.posts(
-                manager=('published_post')
-            ).annotate(comment_count=Count('comments')).order_by('-pub_date')
+                manager=('custom_objects')
+            ).comment_count().published_post()
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -89,8 +87,7 @@ class UserUpdateView(LoginRequiredMixin, ReverseMixin, UpdateView):
 class PostListView(PaginateMixin, ListView):
     model = Post
     template_name = 'blog/index.html'
-    queryset = Post.published_post.all(
-    ).annotate(comment_count=Count('comments')).order_by('-pub_date')
+    queryset = Post.custom_objects.comment_count().published_post()
 
 
 class PostCreateView(
@@ -134,17 +131,20 @@ class PostDetailView(PostMixin, DetailView):
     def get_object(self, queryset=None):
         if queryset is None:
             queryset = self.get_queryset()
-        try:
-            post = queryset.select_related(
+
+        post = get_object_or_404(
+            Post.objects.select_related(
                 'author',
                 'category',
                 'location',
-            ).filter(pk=self.kwargs['post_id']).get()
-            if not post.is_published:
-                if self.request.user != post.author:
-                    raise Http404
-        except queryset.model.DoesNotExist:
-            raise Http404
+            ),
+            pk=self.kwargs['post_id']
+        )
+        if self.request.user != post.author:
+            return get_object_or_404(
+                Post.custom_objects.published_post(),
+                pk=self.kwargs['post_id']
+            )
         return post
 
     def get_context_data(self, **kwargs):
@@ -172,8 +172,8 @@ class CatgoryView(PaginateMixin, ListView):
     def get_queryset(self):
         category = self.get_category()
         return category.posts(
-            manager='published_post'
-        ).annotate(comment_count=Count('comments')).order_by('-pub_date')
+            manager='custom_objects'
+        ).comment_count().published_post()
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)

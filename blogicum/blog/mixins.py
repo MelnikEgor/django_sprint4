@@ -1,7 +1,15 @@
+from django.contrib.auth.mixins import UserPassesTestMixin
 from django.urls import reverse
 
 from .models import Comment, Post
 from blogicum.constants import COUNT_POSTS_PAGINATE
+
+
+class OnlyAuthorMixin(UserPassesTestMixin):
+
+    def test_func(self):
+        object = self.get_object()
+        return object.author == self.request.user
 
 
 class CommetMixin:

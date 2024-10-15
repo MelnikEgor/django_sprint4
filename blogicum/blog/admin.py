@@ -100,7 +100,7 @@ class CommentAdmin(admin.ModelAdmin):
         'author',
     )
     search_fields = (
-        'author',
+        'author__username',
     )
     list_filter = (
         'author',

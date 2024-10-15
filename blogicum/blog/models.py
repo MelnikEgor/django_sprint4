@@ -2,7 +2,7 @@ from django.contrib.auth import get_user_model
 from django.db import models
 from django.urls import reverse
 
-from .manager import PublishedPostManager, CountCommentsUnderPostManager
+from .manager import PostQuerySet
 from blogicum.constants import LENGHT_STRING, MAX_QUANTITY_SYMBOLS
 from core.models import DateTimeModel, PublishedModel
 
@@ -83,15 +83,14 @@ class Post(DateTimeModel, PublishedModel):
         verbose_name='Категория'
     )
     objects = models.Manager()
-    published_post = PublishedPostManager()
-    count_comments = CountCommentsUnderPostManager()
+    custom_objects = PostQuerySet.as_manager()
     image = models.ImageField(
         verbose_name='Изображение',
         upload_to='posts_images',
         blank=True
     )
 
-    class Meta(DateTimeModel.Meta):
+    class Meta:
         verbose_name = 'публикация'
         verbose_name_plural = 'Публикации'
         default_related_name = 'posts'

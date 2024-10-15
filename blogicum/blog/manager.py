@@ -3,30 +3,21 @@ from django.db.models import Count
 from django.utils import timezone
 
 
-class PublishedPostManager(models.Manager):
-    """
-    Собственный менеджер.
+class PostQuerySet(models.query.QuerySet):
 
-    Фильтрация запросов на посты, которые опубликованы.
-    Получение всех необходимых данныйх.
-    """
-
-    def get_queryset(self):
-        return super().get_queryset().select_related(
+    def published_post(self):
+        return self.select_related(
             'category',
             'author',
-            'location'
+            'location',
         ).filter(
             is_published=True,
             pub_date__lte=timezone.now(),
             category__is_published=True
         )
 
-
-class CountCommentsUnderPostManager(models.Manager):
-
-    def get_queryset(self):
-        return super().get_queryset().annotate(
+    def comment_count(self):
+        return self.annotate(
             comment_count=Count('comments')
         ).order_by(
             '-pub_date',

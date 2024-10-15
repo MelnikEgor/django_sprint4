@@ -2,7 +2,7 @@ from django import forms
 from django.core.exceptions import ValidationError
 from django.core.mail import send_mail
 
-from .models import Post, Comment, User
+from .models import Comment, Post, User
 from blogicum.constants import (
     BAD_WORD,
     FORMAT_DATE_TIME,
